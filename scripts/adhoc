@@ -1,0 +1,94 @@
+#!/usr/bin/env python
+
+"""
+    Adhoc: A command-line XMPP ad-hoc command runner.
+    Copyright (C) 2011 Lance Stout
+    This file is part of Adhoc.
+
+    See the file LICENSE for copying permission.
+"""
+
+import sys
+import os
+import logging
+import getpass
+from optparse import OptionParser
+
+import sleekxmpp
+from sleekxmpp.xmlstream import ElementBase, ET, register_stanza_plugin
+
+from adhoc import __version__, Config, AdHocRunner
+
+if sys.version_info < (3, 0):
+    reload(sys)
+    sys.setdefaultencoding('utf8')
+
+if __name__ == '__main__':
+    optp = OptionParser(
+            usage="Usage: %prog [options]",
+            version='%%prog %s' % __version__)
+
+    optp.add_option('-q', '--quiet',
+                    help='set logging to ERROR',
+                    action='store_const',
+                    dest='loglevel',
+                    const=logging.ERROR,
+                    default=logging.ERROR)
+    optp.add_option('-d', '--debug',
+                    help='set logging to DEBUG',
+                    action='store_const',
+                    dest='loglevel',
+                    const=logging.DEBUG,
+                    default=logging.ERROR)
+    optp.add_option('-v', '--verbose',
+                    help='set logging to COMM',
+                    action='store_const',
+                    dest='loglevel',
+                    const=5,
+                    default=logging.ERROR)
+    optp.add_option('-c', '--config',
+                    help='path to config file',
+                    dest='config',
+                    default='~/.adhocrc')
+    optp.add_option('-j', '--jid',
+                    help='JID to use',
+                    dest='jid')
+    optp.add_option('-p', '--provider',
+                    help='JID providing ad-hoc commands',
+                    dest='provider')
+    optp.add_option('-n', '--command',
+                    help='node name of command to run.',
+                    dest='command',
+                    default=None)
+
+    opts, args = optp.parse_args()
+
+    # Setup logging format
+    logging.basicConfig(level=opts.loglevel,
+                        format='%(levelname)-8s %(message)s')
+
+    # Try loading config file
+    try:
+        with open(os.path.expanduser(opts.config)) as config_file:
+                config_data = "\n".join([line for line in config_file])
+    except:
+        config_data = '<config xmlns="adhoc:config" />'
+    config = Config(xml=ET.fromstring(config_data))
+
+    # Request any info not provided
+    if not opts.jid:
+        opts.jid = config['jid']
+        if not opts.jid:
+            opts.jid = raw_input("Username: ")
+    password = config['password']
+    if not password:
+        password = getpass.getpass("Password: ")
+    if not opts.provider:
+        opts.provider = config['provider']
+        if not opts.provider:
+            opts.provider = raw_input("Provider: ")
+
+    # Start the application
+    xmpp = AdHocRunner(opts.jid, password, opts.provider, opts.command)
+    if xmpp.connect():
+        xmpp.process(threaded=False)
